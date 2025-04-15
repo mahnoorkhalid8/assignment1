@@ -1,47 +1,76 @@
 import streamlit as st
-from docx2pdf import convert
-import os
-import tempfile
+import pandas as pd
+import os  
+from io import BytesIO
 
-def main():
-    st.title("Word to PDF Converter")
-    st.write("Upload a Word document (.docx) and convert it to PDF")
+st.set_page_config(page_title="Data Sweeper", layout="wide")
+st.title("Data Sweeper")
+st.write("Transform your files between csv and excel format with built in cleaning and visulaization")
 
-    # File uploader
-    uploaded_file = st.file_uploader("Choose a Word document", type=['docx'])
+uploaded_files = st.file_uploader("Upload your files (CSV Or Excel):",type=["csv","xlsx"],
+accept_multiple_files=True)
 
-    if uploaded_file is not None:
-        # Create a temporary directory to store the files
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # Save the uploaded file
-            docx_path = os.path.join(temp_dir, uploaded_file.name)
-            with open(docx_path, 'wb') as f:
-                f.write(uploaded_file.getbuffer())
+if uploaded_files:
+    for file in uploaded_files:
+        file_ext = os.path.splitext(file.name)[-1].lower()
 
-            # Create output PDF path
-            pdf_path = os.path.join(temp_dir, os.path.splitext(uploaded_file.name)[0] + '.pdf')
+        if file_ext == ".csv":
+            df = pd.read_csv(file)
+        elif file_ext == ".xlsx":
+            df = pd.read_excel(file)
+        else:
+            st.error(f"Unsupported file type: {file_ext}")
+            continue
 
-            # Convert button
-            if st.button('Convert to PDF'):
-                with st.spinner('Converting...'):
-                    try:
-                        # Convert DOCX to PDF
-                        convert(docx_path, pdf_path)
+        st.write(f"** File Name:** {file.name}")
+        st.write(f"** File Size:** {file.size/1024}")
+        
+        st.write("Review the data") 
+        st.dataframe(df.head())
 
-                        # Read the PDF file
-                        with open(pdf_path, 'rb') as pdf_file:
-                            pdf_data = pdf_file.read()
-
-                        # Create download button
-                        st.success('Conversion completed!')
-                        st.download_button(
-                            label="Download PDF",
-                            data=pdf_data,
-                            file_name=os.path.splitext(uploaded_file.name)[0] + '.pdf',
-                            mime='application/pdf'
-                        )
-                    except Exception as e:
-                        st.error(f'An error occurred: {str(e)}')
-
-if __name__ == '__main__':
-    main()
+        st.subheader("Data Cleaning Options")
+        if st.checkbox(f"clean data for {file.name}"):
+           col1, col2 = st.columns(2)
+           
+           with col1:
+              if st.button(f"Remove Duplicates from {file.name}"):
+                df.drop_duplicates(inplace=True)
+                st.write("Duplicates Removed!")
+                
+           with col2:
+               if st.button(f"Fill mising values for {file.name}"):
+                numeric_cols = df.select_dtypes(include=['number']).columns
+                df[numeric_cols] = df[numeric_cols].fillna(df[numeric_cols].mean())
+                st.write("Missing values have been filled")
+                
+        st.subheader("Select columns to convert")
+        columns = st.multiselect(f"Choose columns for {file.name}", df.columns, default=df.columns)
+        df = df[columns]
+        
+        st.subheader("Data Visulization")
+        if st.checkbox(f"Show visulaization for {file.name}"):
+            st.bar_chart(df.select_dtypes(include='number').iloc[:,:2])
+        
+        st.subheader("Conversion Options")
+        conversion_type = st.radio(f"Convert {file.name} to:",["CSV","Excel"], key=file.name)
+        if st.button(f"Convert {file.name}"):
+            buffer = BytesIO()
+            if conversion_type == "CSV":
+                df.to_csv(buffer,index=False)
+                file_name = file.name.replace(file_ext,".csv")
+                mime_type = "text/csv"
+                
+            elif conversion_type == "Excel":
+                df.to_excel(buffer,index=False)
+                file_name = file.name.replace(file_ext,".xlsx")
+                mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            buffer.seek(0)
+            
+            st.download_button(
+				label=f"Download {file.name} as {conversion_type}",
+				data=buffer,
+				file_name=file_name,
+				mime=mime_type
+				)
+            
+st.success("All files processed")
