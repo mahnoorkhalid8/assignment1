@@ -23,7 +23,7 @@ if uploaded_files:
             continue
 
         st.write(f"** File Name:** {file.name}")
-        st.write(f"** File Size:** {file.size/1024}")
+        st.write(f"** File Size:** {round(file.size/1024, 2)} KB")
         
         st.write("Review the data") 
         st.dataframe(df.head())

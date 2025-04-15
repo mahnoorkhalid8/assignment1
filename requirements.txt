@@ -1,2 +1,4 @@
 streamlit
 docx2pdf 
+openpyxl
+pandas
